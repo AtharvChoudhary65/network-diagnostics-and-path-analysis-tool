@@ -5,12 +5,12 @@ import re
 
 def ping(target, count=4):
     """
-    Ping a target and calculate basic RTT statistics.
+    Ping a target and calculate latency/RTT statistics.
 
     Returns:
         dict containing:
         target, sent, received, packet_loss,
-        min_rtt, avg_rtt, max_rtt
+        latency_ms, min_rtt, avg_rtt, max_rtt
     """
 
     system = platform.system().lower()
@@ -34,6 +34,7 @@ def ping(target, count=4):
             "sent": count,
             "received": 0,
             "packet_loss": 100.0,
+            "latency_ms": [],
             "min_rtt": None,
             "avg_rtt": None,
             "max_rtt": None,
@@ -46,6 +47,7 @@ def ping(target, count=4):
             "sent": count,
             "received": 0,
             "packet_loss": 100.0,
+            "latency_ms": [],
             "min_rtt": None,
             "avg_rtt": None,
             "max_rtt": None,
@@ -54,23 +56,24 @@ def ping(target, count=4):
 
     output = result.stdout + result.stderr
 
-    # Extract RTT values from ping output.
-    rtt_values = []
-
-    pattern = r"(?:time[=<]\s*|time[=<])(\d+(?:\.\d+)?)\s*ms"
+    # Find individual RTT/latency values.
+    # Example:
+    # Windows: time=24ms
+    # Linux:   time=24.5 ms
+    pattern = r"time[=<]\s*(\d+(?:\.\d+)?)\s*ms"
 
     matches = re.findall(pattern, output, re.IGNORECASE)
 
-    for match in matches:
-        rtt_values.append(float(match))
+    latency_values = [float(value) for value in matches]
 
-    received = len(rtt_values)
+    received = len(latency_values)
+
     packet_loss = ((count - received) / count) * 100
 
-    if rtt_values:
-        min_rtt = min(rtt_values)
-        avg_rtt = sum(rtt_values) / len(rtt_values)
-        max_rtt = max(rtt_values)
+    if latency_values:
+        min_rtt = min(latency_values)
+        avg_rtt = sum(latency_values) / len(latency_values)
+        max_rtt = max(latency_values)
     else:
         min_rtt = None
         avg_rtt = None
@@ -81,18 +84,36 @@ def ping(target, count=4):
         "sent": count,
         "received": received,
         "packet_loss": round(packet_loss, 2),
+        "latency_ms": [round(value, 2) for value in latency_values],
         "min_rtt": round(min_rtt, 2) if min_rtt is not None else None,
         "avg_rtt": round(avg_rtt, 2) if avg_rtt is not None else None,
         "max_rtt": round(max_rtt, 2) if max_rtt is not None else None
     }
+
 
 if __name__ == "__main__":
     target = input("Enter hostname or IP address: ")
 
     result = ping(target)
 
-    print("\nPing Results")
-    print("-" * 30)
+    print("\nPing / Latency Results")
+    print("-" * 35)
 
-    for key, value in result.items():
-        print(f"{key}: {value}")
+    print(f"Target       : {result['target']}")
+    print(f"Packets Sent : {result['sent']}")
+    print(f"Packets Recv : {result['received']}")
+    print(f"Packet Loss  : {result['packet_loss']}%")
+
+    print("\nLatency per request:")
+    
+    if result["latency_ms"]:
+        for i, latency in enumerate(result["latency_ms"], start=1):
+            print(f"Request {i}: {latency} ms")
+    else:
+        print("No response received.")
+
+    print("\nRTT Statistics")
+    print("-" * 35)
+    print(f"Minimum RTT  : {result['min_rtt']} ms")
+    print(f"Average RTT  : {result['avg_rtt']} ms")
+    print(f"Maximum RTT  : {result['max_rtt']} ms")
