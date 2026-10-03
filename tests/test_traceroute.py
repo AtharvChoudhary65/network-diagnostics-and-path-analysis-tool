@@ -1,18 +1,44 @@
 """
-Unit tests for diagnostics/traceroute.py.
+Unit tests for traceroute/traceroute.py.
 
 These tests do not touch the network: the traceroute command is mocked and
 parsing is checked against captured sample outputs from each OS.
 
 Run from the project root:
     python -m unittest discover -s tests -v
+or run this file directly (e.g. VS Code "Run Python File").
 """
 
+import os
 import subprocess
+import sys
 import unittest
 from unittest import mock
 
-from diagnostics import traceroute as tr
+
+def _add_repo_root_to_path() -> None:
+    """Make ``import traceroute`` find the package, however this file is run.
+
+    When a file is run directly, Python puts the file's own folder first on
+    sys.path. If that folder is ``traceroute/``, ``import traceroute`` would
+    load ``traceroute/traceroute.py`` instead of the package. Putting the repo
+    root first avoids that.
+    """
+    root = os.path.dirname(os.path.abspath(__file__))
+    while not os.path.isfile(os.path.join(root, "traceroute", "traceroute.py")):
+        parent = os.path.dirname(root)
+        if parent == root:  # reached the drive root without finding the repo
+            return
+        root = parent
+    # Drop the traceroute/ folder itself from sys.path so it can't shadow the package.
+    package_dir = os.path.normcase(os.path.join(root, "traceroute"))
+    sys.path[:] = [p for p in sys.path if os.path.normcase(os.path.abspath(p or ".")) != package_dir]
+    sys.path.insert(0, root)
+
+
+_add_repo_root_to_path()
+
+from traceroute import traceroute as tr  # noqa: E402  (import after path setup)
 
 LINUX_OUTPUT = """\
 traceroute to example.com (93.184.216.34), 30 hops max, 60 byte packets
@@ -162,8 +188,8 @@ class TestRunTraceroute(unittest.TestCase):
             args=[], returncode=returncode, stdout=stdout, stderr=stderr
         )
 
-    @mock.patch("diagnostics.traceroute.platform.system", return_value="Linux")
-    @mock.patch("diagnostics.traceroute.subprocess.run")
+    @mock.patch("traceroute.traceroute.platform.system", return_value="Linux")
+    @mock.patch("traceroute.traceroute.subprocess.run")
     def test_successful_run(self, mock_run, _mock_system):
         mock_run.return_value = self._completed(LINUX_OUTPUT)
         result = tr.run_traceroute("example.com")
@@ -178,28 +204,28 @@ class TestRunTraceroute(unittest.TestCase):
         _, kwargs = mock_run.call_args
         self.assertNotIn("shell", kwargs)
 
-    @mock.patch("diagnostics.traceroute.platform.system", return_value="Windows")
-    @mock.patch("diagnostics.traceroute.subprocess.run")
+    @mock.patch("traceroute.traceroute.platform.system", return_value="Windows")
+    @mock.patch("traceroute.traceroute.subprocess.run")
     def test_windows_run(self, mock_run, _mock_system):
         mock_run.return_value = self._completed(WINDOWS_OUTPUT)
         result = tr.run_traceroute("example.com")
         self.assertEqual(mock_run.call_args[0][0][0], "tracert")
         self.assertTrue(result.reached_destination)
 
-    @mock.patch("diagnostics.traceroute.subprocess.run")
+    @mock.patch("traceroute.traceroute.subprocess.run")
     def test_destination_not_reached(self, mock_run):
         mock_run.return_value = self._completed(MACOS_OUTPUT.replace(" 4  8.8.8.8", " 4  9.9.9.9"))
         result = tr.run_traceroute("8.8.8.8")
         self.assertTrue(result.success)
         self.assertFalse(result.reached_destination)
 
-    @mock.patch("diagnostics.traceroute.subprocess.run", side_effect=FileNotFoundError)
+    @mock.patch("traceroute.traceroute.subprocess.run", side_effect=FileNotFoundError)
     def test_tool_not_installed(self, _mock_run):
         result = tr.run_traceroute("example.com")
         self.assertFalse(result.success)
         self.assertIn("not found", result.error)
 
-    @mock.patch("diagnostics.traceroute.subprocess.run")
+    @mock.patch("traceroute.traceroute.subprocess.run")
     def test_overall_timeout_keeps_partial_hops(self, mock_run):
         partial = "\n".join(LINUX_OUTPUT.splitlines()[:3]).encode()
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="traceroute", timeout=1, output=partial)
@@ -208,7 +234,7 @@ class TestRunTraceroute(unittest.TestCase):
         self.assertEqual(len(result.hops), 2)
         self.assertIn("did not finish", result.error)
 
-    @mock.patch("diagnostics.traceroute.subprocess.run")
+    @mock.patch("traceroute.traceroute.subprocess.run")
     def test_unknown_host(self, mock_run):
         mock_run.return_value = self._completed(
             "", returncode=2, stderr="nosuchhost.invalid: Name or service not known"
@@ -217,7 +243,7 @@ class TestRunTraceroute(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIn("not known", result.error)
 
-    @mock.patch("diagnostics.traceroute.subprocess.run")
+    @mock.patch("traceroute.traceroute.subprocess.run")
     def test_invalid_target_does_not_run_command(self, mock_run):
         result = tr.run_traceroute("-rf")
         self.assertFalse(result.success)

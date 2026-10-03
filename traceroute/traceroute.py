@@ -21,12 +21,12 @@ parse_traceroute_output(output) -> list[Hop]
     Parse raw traceroute/tracert text (exposed for testing and reuse).
 
 ``TracerouteResult.hops`` (or ``TracerouteResult.to_dict()["hops"]``) is the
-input expected by ``analysis/path_analysis.py``.
+input expected by the ``path_analysis`` module.
 
 Standalone usage
 ----------------
-    python -m diagnostics.traceroute example.com
-    python -m diagnostics.traceroute 8.8.8.8 --max-hops 15 --json
+    python -m traceroute example.com
+    python -m traceroute 8.8.8.8 --max-hops 15 --json
 """
 
 from __future__ import annotations
